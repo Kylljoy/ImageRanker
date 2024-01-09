@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<style>
+
+#masterDiv {margin:min(calc(50vw - 45vh - 3px), calc(5vw - 3px));background-color:#000;}
+#divA, #divB{width:min(90vh, 45vw); margin:auto; height:min(90vh, 45vw);display:inline-block;background-size: contain;background-repeat: no-repeat;}
+#divA {background-image:url("/$IMG_1");}
+#divB {background-image:url("/$IMG_2");}
+
+</style>
+
+<body>
+<div id="masterDiv"><div id="divA" onclick="window.location.replace('result/$IMG_1/$IMG_2')"></div><div id="divB" onclick="window.location.replace('result/$IMG_1/$IMG_2')"></div></div>
+</body>
+
+
+</html>
