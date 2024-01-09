@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <style>
-table {width:100vw; text-align:center;}
+table {width:100vw; text-align:center; border:2px black solid;}
 tr:nth-child(even) {
     background-color: #000;
     color:#fff;
@@ -16,6 +16,7 @@ tr:nth-child(odd) {
 
 <body>
 <table>
+<center><h1>CURRENT IMAGE RANKINGS</h1><b><p style="display:inline-block;">Votes Cast Thus Far: $VOTES</p><p style="margin:0 1em; display:inline-block">//</p><p style="color:red;display:inline-block;">Votes Until New Rankings: $THRESHOLD</p></b></center>
 <tr><th>Filename</th><th>ID</th><th>Rank</th></tr>
 $RANKINGS
 </body>

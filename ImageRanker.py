@@ -56,11 +56,12 @@ def logResult(victor, loser):
     global memlock, numTotalVotes, currentRoundVotes, numVotesPerRound, matchesArray, rankingsArray
     memlock.acquire()
     matchesArray[victor][loser] += 1
-    print("%d > %d" % (victor, loser))
+    print("[Match Result] %d beats %d" % (victor, loser))
     numTotalVotes += 1
     currentRoundVotes += 1
     if (currentRoundVotes >= numVotesPerRound):
         newRatings = [0 for i in range(0, numPhotos)]
+        ignoranceThreshold = 750
         for participant in range(0, numPhotos):
             currentELO = 0
             totalMatches = 0;
@@ -70,12 +71,16 @@ def logResult(victor, loser):
                     continue
                 #Add up all the victories
                 if matchesArray[participant][opponent] > 0:
-                    currentELO += matchesArray[participant][opponent] * (rankingsArray[opponent] + 400)
-                    totalMatches += matchesArray[participant][opponent]
+                    #Do not consider a win if it happens against an extremely predictable opponnent
+                    if (rankingsArray[participant] - rankingsArray[opponent] <= ignoranceThreshold):
+                        currentELO += matchesArray[participant][opponent] * (rankingsArray[opponent] + 400)
+                        totalMatches += matchesArray[participant][opponent]
                 #...and all the losses
                 if matchesArray[opponent][participant] > 0:
-                    currentELO += matchesArray[opponent][participant] * (rankingsArray[opponent] - 400)
-                    totalMatches += matchesArray[opponent][participant]
+                    #Do not consider a loss if it happens against an extremely predictable opponnent
+                    if (rankingsArray[opponent] - rankingsArray[participant] <= ignoranceThreshold):
+                        currentELO += matchesArray[opponent][participant] * (rankingsArray[opponent] - 400)
+                        totalMatches += matchesArray[opponent][participant]
             if (totalMatches > 0):     
                 currentELO /= totalMatches
                 newRatings[participant] = int(currentELO)
@@ -83,11 +88,11 @@ def logResult(victor, loser):
                 newRatings[participant] = rankingsArray[participant]
         currentRoundVotes = 0
         rankingsArray = newRatings[::]
-        print("New Rankings Available")
+        print("[New Rankings Available]")
     memlock.release()
 
 def compileRankings(cSock):
-    global numTotalVotes, rankingsArray
+    global numTotalVotes, rankingsArray, numVotesPerRound
     sortedRankings = [(rankingsArray[i], i) for i in range(0, numPhotos)]
     sortedRankings.sort()
     table = ""
@@ -97,6 +102,8 @@ def compileRankings(cSock):
     fileData = newFile.read()
     newFile.close()
     fileData = fileData.replace("$RANKINGS", table)
+    fileData = fileData.replace("$VOTES", str(numTotalVotes))
+    fileData = fileData.replace("$THRESHOLD", str(numVotesPerRound - (numTotalVotes % numVotesPerRound)))
     cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: World ImageRanker\r\nContent-Type: text/html\r\n\r\n",encoding="utf-8"))
     cSock.send(bytes(fileData, encoding="utf-8"))
     cSock.send(bytes("\r\n\r\n", encoding="utf-8"))
@@ -107,7 +114,7 @@ def serveMatch(cSock):
     imgB = imgA
     while imgB == imgA:
         imgB = random.randint(0, numPhotos - 1)
-    print("Serving %d vs %d" % (imgA, imgB))
+    print("[Match Opened] %d vs %d" % (imgA, imgB))
     newFile = open("imgRank.html", "r")
     fileData = newFile.read()
     newFile.close()
