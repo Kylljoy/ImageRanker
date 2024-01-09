@@ -6,6 +6,7 @@ import random
 import re
 import webbrowser
 import traceback
+import threading
 
 from baseEssentials import *
 
@@ -33,6 +34,9 @@ if (len(sys.argv) == 3):
     numVotesPerRound = int(sys.argv[2])
 
 
+
+memlock = threading.Lock()
+
 def serveFile(cSock, filepath):
     try:
         newFile = open(filepath, "rb")
@@ -49,7 +53,8 @@ def serveFile(cSock, filepath):
         send404(cSock)
 
 def logResult(victor, loser):
-    global numTotalVotes, currentRoundVotes, numVotesPerRound, matchesArray, rankingsArray
+    global memlock, numTotalVotes, currentRoundVotes, numVotesPerRound, matchesArray, rankingsArray
+    memlock.acquire()
     matchesArray[victor][loser] += 1
     numTotalVotes += 1
     currentRoundVotes += 1
@@ -77,6 +82,7 @@ def logResult(victor, loser):
                 newRatings[participant] = rankingsArray[participant]
         currentRoundVotes = 0
         rankingsArray = newRatings[::]
+    memlock.release()
 
 def compileRankings():
     sortedRankings = [(rankingsArray[i], i) for i in range(0, numPhotos)]
@@ -99,6 +105,73 @@ def serveMatch(cSock):
     cSock.send(bytes(fileData, encoding="utf-8"))
     cSock.send(bytes("\r\n\r\n", encoding="utf-8"))
     cSock.close()
+
+def handleRequest(cSock):
+    st = b''
+    while True:
+        s = cSock.recv(1024)
+        if s:
+            st += s
+            if (len(s) < 1024):
+                break
+        else:
+            break
+    header = st.decode("utf-8")
+    header = header[:header.find("\r\n\r\n")]
+    header = header[:header.find("\r\n")]
+    regEx = re.compile("GET [^\s\?]*")
+    argsregEx = re.compile("\?[\S]*")
+    matches = regEx.match(header)
+    argMatches = argsregEx.search(header)
+    if matches == None:
+        cSock.close()
+        return
+    fileName = header[matches.start() + 4 : matches.end()]
+
+    args = {}
+    if argMatches:
+    
+        argString = header[argMatches.start() + 1 : argMatches.end()]
+        argsList = argString.split("&")
+        for pair in argsList:
+            values = pair.split("=")
+            if (len(values) > 1):
+                key = stripFormatting(values[0])
+                value = stripFormatting(values[1])
+                args[key] = value
+    path = fileName.split("/")[1:]
+    #print("\n\nArgs =" + str(args))
+    #print("\n\nPath = " + " / ".join(path))
+    suffix = fileName.split(".")[-1]
+
+    if (fileName == "/"):
+        serveMatch(cSock)
+        return
+
+    elif (path[0] == "result"):
+        if (len(path) >= 3 and path[1].isdigit() and path[2].isdigit()):
+            logResult(int(path[1]), int(path[2]))
+        redirectPage(cSock, "/")
+        return
+    elif (path[0].isdigit()):
+        serveFile(cSock, sys.argv[1] + "/" + fileNames[int(path[0]) % numPhotos]) 
+        return
+    elif (".." not in fileName and suffix != "py"):
+        try:
+            newFile = open(fileName[1:], "rb")
+            contentType = "text/plain"
+            if (suffix in fileMap.keys()):
+                contentType = fileMap[suffix]
+            cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: ImageRanker\r\nContent-Type: " + contentType + "\r\n\r\n", encoding = "utf- 8"))
+            cSock.send(newFile.read())
+            cSock.send(bytes("\r\n\r\n", encoding = "utf-8"))
+            newFile.close()
+            cSock.close()
+        except FileNotFoundError:
+            send404(cSock)
+    else:
+        send404(cSock)
+    
     
     
 
@@ -119,71 +192,9 @@ cSock = None
 while True:
         try:
             (cSock, addr) = server.accept()
-            st = b''
-            while True:
-                s = cSock.recv(1024)
-                if s:
-                    st += s
-                    if (len(s) < 1024):
-                        break
-                else:
-                    break
-            header = st.decode("utf-8")
-            header = header[:header.find("\r\n\r\n")]
-            header = header[:header.find("\r\n")]
-            regEx = re.compile("GET [^\s\?]*")
-            argsregEx = re.compile("\?[\S]*")
-            matches = regEx.match(header)
-            argMatches = argsregEx.search(header)
-            if matches == None:
-                cSock.close()
-                continue
-            fileName = header[matches.start() + 4 : matches.end()]
-
-            args = {}
-            if argMatches:
-            
-                argString = header[argMatches.start() + 1 : argMatches.end()]
-                argsList = argString.split("&")
-                for pair in argsList:
-                    values = pair.split("=")
-                    if (len(values) > 1):
-                        key = stripFormatting(values[0])
-                        value = stripFormatting(values[1])
-                        args[key] = value
-            path = fileName.split("/")[1:]
-            #print("\n\nArgs =" + str(args))
-            #print("\n\nPath = " + " / ".join(path))
-            suffix = fileName.split(".")[-1]
-
-            if (fileName == "/"):
-                serveMatch(cSock)
-                continue
-
-            elif (path[0] == "result"):
-                if (len(path) >= 3 and path[1].isdigit() and path[2].isdigit()):
-                    logResult(int(path[1]), int(path[2]))
-                redirectPage(cSock, "/")
-                continue
-            elif (path[0].isdigit()):
-                serveFile(cSock, sys.argv[1] + "/" + fileNames[int(path[0]) % numPhotos]) 
-                continue
-            elif (".." not in fileName and suffix != "py"):
-                try:
-                    newFile = open(fileName[1:], "rb")
-                    contentType = "text/plain"
-                    if (suffix in fileMap.keys()):
-                        contentType = fileMap[suffix]
-                    cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: ImageRanker\r\nContent-Type: " + contentType + "\r\n\r\n", encoding = "utf- 8"))
-                    cSock.send(newFile.read())
-                    cSock.send(bytes("\r\n\r\n", encoding = "utf-8"))
-                    newFile.close()
-                    cSock.close()
-                except FileNotFoundError:
-                    send404(cSock)
-      
-            else:
-                send404(cSock)
+            t = threading.Thread(target = handleRequest, args = (cSock,))
+            t.daemon = True
+            t.start()
         except KeyboardInterrupt:
             print("Shutting Down...")
             cSock.close()
