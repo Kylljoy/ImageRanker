@@ -97,7 +97,7 @@ def compileRankings(cSock):
     sortedRankings.sort()
     table = ""
     for pair in sortedRankings[::-1]:
-        table += "<tr><td>" + fileNames[pair[1]] + "</td><td>" + str(pair[1]) + "</td><td>"+ str(pair[0]) +"</td></tr>"
+        table += "<tr><td><a href=\"/view/" + str(pair[1]) + "\">" + fileNames[pair[1]] + "</a></td><td>" + str(pair[1]) + "</td><td>"+ str(pair[0]) +"</td></tr>"
     newFile = open("imgRankings.html", "r")
     fileData = newFile.read()
     newFile.close()
@@ -120,7 +120,7 @@ def serveMatch(cSock):
     newFile.close()
     fileData = fileData.replace("$IMG_1", str(imgA))
     fileData = fileData.replace("$IMG_2", str(imgB))
-    cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: World ImageRanker\r\nContent-Type: text/html\r\n\r\n",encoding="utf-8"))
+    cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: ImageRanker\r\nContent-Type: text/html\r\n\r\n",encoding="utf-8"))
     cSock.send(bytes(fileData, encoding="utf-8"))
     cSock.send(bytes("\r\n\r\n", encoding="utf-8"))
     cSock.close()
@@ -168,7 +168,10 @@ def handleRequest(cSock):
         return
     elif (path[0] == "rankings"):
         compileRankings(cSock)
-
+    elif (path[0] == "view"):
+        if (len(path) >= 1 and path[1].isdigit()):
+            serveImage(cSock, int(path[1]))
+            return
     elif (path[0] == "result"):
         if (len(path) >= 3 and path[1].isdigit() and path[2].isdigit()):
             logResult(int(path[1]), int(path[2]))
@@ -188,13 +191,22 @@ def handleRequest(cSock):
             cSock.send(bytes("\r\n\r\n", encoding = "utf-8"))
             newFile.close()
             cSock.close()
+            return
         except FileNotFoundError:
             send404(cSock)
-    else:
-        send404(cSock)
+            return
+    send404(cSock)
     
-    
-    
+
+def serveImage(cSock, imgId):
+    newFile = open("imgView.html", "r")
+    fileData = newFile.read()
+    newFile.close()
+    fileData = fileData.replace("$IMG", str(imgId))
+    cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: ImageRanker\r\nContent-Type: text/html\r\n\r\n",encoding="utf-8"))
+    cSock.send(bytes(fileData, encoding="utf-8"))
+    cSock.send(bytes("\r\n\r\n", encoding="utf-8"))
+    cSock.close()
 
 
 
