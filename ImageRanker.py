@@ -29,7 +29,7 @@ matchesArray = [[0 for i in range(0, numPhotos)] for j in range(0, numPhotos)]
 rankingsArray = [1000 for i in range(0, numPhotos)]
 currentRoundVotes = 0
 numTotalVotes = 0
-numVotesPerRound = 5
+numVotesPerRound = 20
 if (len(sys.argv) == 3):
     numVotesPerRound = int(sys.argv[2])
 
@@ -56,6 +56,7 @@ def logResult(victor, loser):
     global memlock, numTotalVotes, currentRoundVotes, numVotesPerRound, matchesArray, rankingsArray
     memlock.acquire()
     matchesArray[victor][loser] += 1
+    print("%d > %d" % (victor, loser))
     numTotalVotes += 1
     currentRoundVotes += 1
     if (currentRoundVotes >= numVotesPerRound):
@@ -82,14 +83,25 @@ def logResult(victor, loser):
                 newRatings[participant] = rankingsArray[participant]
         currentRoundVotes = 0
         rankingsArray = newRatings[::]
+        print("New Rankings Available")
     memlock.release()
 
-def compileRankings():
+def compileRankings(cSock):
+    global numTotalVotes, rankingsArray
     sortedRankings = [(rankingsArray[i], i) for i in range(0, numPhotos)]
     sortedRankings.sort()
+    table = ""
     for pair in sortedRankings[::-1]:
-        print("%s : %d" % (fileNames[pair[1]],pair[0]))
-
+        table += "<tr><td>" + fileNames[pair[1]] + "</td><td>" + str(pair[1]) + "</td><td>"+ str(pair[0]) +"</td></tr>"
+    newFile = open("imgRankings.html", "r")
+    fileData = newFile.read()
+    newFile.close()
+    fileData = fileData.replace("$RANKINGS", table)
+    cSock.send(bytes("HTTP/1.1 200 Document follows \r\nServer: World ImageRanker\r\nContent-Type: text/html\r\n\r\n",encoding="utf-8"))
+    cSock.send(bytes(fileData, encoding="utf-8"))
+    cSock.send(bytes("\r\n\r\n", encoding="utf-8"))
+    cSock.close()
+    
 def serveMatch(cSock):
     imgA = random.randint(0, numPhotos - 1)
     imgB = imgA
@@ -147,6 +159,8 @@ def handleRequest(cSock):
     if (fileName == "/"):
         serveMatch(cSock)
         return
+    elif (path[0] == "rankings"):
+        compileRankings(cSock)
 
     elif (path[0] == "result"):
         if (len(path) >= 3 and path[1].isdigit() and path[2].isdigit()):
